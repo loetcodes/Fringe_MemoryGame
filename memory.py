@@ -78,6 +78,7 @@ def main():
 
     x_mouse_pos = 0
     y_mouse_pos = 0
+    choice_one = None
 
     game_board = createRandomBoard()
     revealed_sects = initializeExposed(False)
@@ -94,13 +95,21 @@ def main():
         # Do not go faster than this frame rate.
         milliseconds = fps_clock.tick(FPS)
         playtime += milliseconds / 1000.0
+        mouseClicked = False
+
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 mainloop = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    mainloop = False
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                mainloop = False
+            elif event.type == pygame.MOUSEMOTION:
+                x_mouse_pos, y_mouse_pos = event.pos
+            elif event.type == pygame.MOUSEBUTTONUP:
+                x_mouse_pos, y_mouse_pos = event.pos
+                mouseClicked = True
+                print("Mouse clicked at:", x_mouse_pos, y_mouse_pos)
+
 
         # Print frame rate and playtime in title bar.
         text = " Fringe Memory Game FPS: {0:.2f}   Playtime: {1:.2f}".format(fps_clock.get_fps(), playtime)
@@ -108,8 +117,32 @@ def main():
 
         drawBoard(game_board, revealed_sects)
 
+        tile_pos = getTileAtPos(x_mouse_pos, y_mouse_pos)
+        if tile_pos[0] is not None and tile_pos[1] is not None:
+            if not revealed_sects[tile_pos[0]][tile_pos[1]] and mouseClicked:
+                reveal_card_slide(game_board, [tile_pos])
+                revealed_sects[tile_pos[0]][tile_pos[1]] = True
+                if choice_one == None and choice_one != tile_pos:
+                    #checks that choice one is the first tile and also accounts for one re-clicking the same tile
+                    choice_one = tile_pos
+                else:
+                    first_tile = game_board[choice_one[0]][choice_one[1]]
+                    second_tile = game_board[tile_pos[0]][tile_pos[1]]
+                    print("first tile is ", first_tile)
+                    print("second tile is ", second_tile)
+
+                    if first_tile != second_tile:
+                        #Then images are not the same and therefore, cover them up
+                        pygame.time.wait(800)
+                        cover_card_slide(game_board, [choice_one, tile_pos])
+                        revealed_sects[choice_one[0]][choice_one[1]] = False
+                        revealed_sects[tile_pos[0]][tile_pos[1]] = False
+                    choice_one = None
+
         # Update pygame display.
         pygame.display.flip()
+
+
 
 
 def exposeStartGameboard(board):
@@ -139,12 +172,23 @@ def exposeStartGameboard(board):
 
 
 def reveal_card_slide(board, cards):
-    for width in range(TILE_WIDTH, (-UNCOVER_SPEED) - 1, -UNCOVER_SPEED):
+    """
+    Reveals the cards at a certain speed.
+    :param board: the board that is passed on
+    :param cards: the cards images to revealed
+    """
+    for width in range(TILE_WIDTH, (-UNCOVER_SPEED), -UNCOVER_SPEED):
         draw_board_covers(board, cards, width)
 
 
+
 def cover_card_slide(board, cards):
-    for width in range(0, (TILE_WIDTH + UNCOVER_SPEED), UNCOVER_SPEED):
+    """
+    Covers revealed cards at the same speed used to cover them.
+    :param board: the board that is passed on
+    :param cards: the cards images to revealed
+    """
+    for width in range((-UNCOVER_SPEED), (TILE_WIDTH), UNCOVER_SPEED):
         draw_board_covers(board, cards, width)
 
 
@@ -178,29 +222,55 @@ def initializeExposed(val):
     return exposed
 
 
-def drawBoard(board, exposed):
-    """ Draws the board in its state
-    For now draw the board with all the images loaded
+def drawBoard(board, exposed, width=TILE_WIDTH):
+    """ Draws the board in its state based on the values in exposed grid.
+    When values in exposed are false, the card cover is drawn, when true the image below is drawn.
     board: list of image locations
+    exposed: boolean values for each of the image tiles
     """
     for dummy_row in range(BOARD_HEIGHT):
         for dummy_col in range(BOARD_WIDTH):
-            top_x = (LEFT_PANEL + BORDER_GAP_X + dummy_col * (TILE_WIDTH + GAP_SIZE))
-            top_y = (BORDER_GAP_Y + dummy_row * (TILE_HEIGHT + GAP_SIZE))
+            card = (dummy_row, dummy_col)
+            coord_pos = topCoords(card)
             if not exposed[dummy_row][dummy_col]:
-                pygame.draw.rect(screen, COL_9,(top_x, top_y, TILE_WIDTH, TILE_HEIGHT))
+                pygame.draw.rect(screen, COL_9, (coord_pos[0], coord_pos[1], width, TILE_HEIGHT))
             else:
-                draw_board_icons(board, dummy_row, dummy_col, top_x, top_y)
+                draw_board_icons(board, dummy_row, dummy_col, coord_pos)
     pygame.display.update()
 
 
-def draw_board_icons(board, row, col,top_x_coord, top_y_coord):
+# def draw_board_icons(board, row, col,top_x_coord, top_y_coord):
+#     """ Draws the images/icons that are to be revealed on the board.
+#     Precondition: This function is called when exposed is True
+#     """
+#     board_image = pygame.image.load(board[row][col]).convert()
+#     board_image = pygame.transform.scale(board_image, (TILE_WIDTH, TILE_HEIGHT))
+#     screen.blit(board_image, (top_x_coord, top_y_coord))
+#     #return board_image
+
+
+# def draw_board_covers(board, cards, width=TILE_WIDTH):
+#     """ Draws the covers that hide the icons/images on the board
+#     Precondition: This function is called when exposed is False
+#     """
+#     for card in cards:
+#         top_x = (LEFT_PANEL + BORDER_GAP_X + card[0] * (TILE_WIDTH + GAP_SIZE))
+#         top_y = (BORDER_GAP_Y + card[1] * (TILE_HEIGHT + GAP_SIZE))
+#         draw_board_icons(board, card[0], card[1], top_x, top_y)
+#         if width > 0:
+#             pygame.draw.rect(screen, COL_9,(top_x, top_y, width, TILE_HEIGHT))
+#     pygame.display.update()
+#     fps_clock.tick(FPS)
+
+
+
+def draw_board_icons(board, row, col, coord_pos):
     """ Draws the images/icons that are to be revealed on the board.
     Precondition: This function is called when exposed is True
     """
     board_image = pygame.image.load(board[row][col]).convert()
     board_image = pygame.transform.scale(board_image, (TILE_WIDTH, TILE_HEIGHT))
-    screen.blit(board_image, (top_x_coord, top_y_coord))
+    screen.blit(board_image, coord_pos)
     #return board_image
 
 
@@ -209,13 +279,40 @@ def draw_board_covers(board, cards, width=TILE_WIDTH):
     Precondition: This function is called when exposed is False
     """
     for card in cards:
-        top_x = (LEFT_PANEL + BORDER_GAP_X + card[0] * (TILE_WIDTH + GAP_SIZE))
-        top_y = (BORDER_GAP_Y + card[1] * (TILE_HEIGHT + GAP_SIZE))
-        draw_board_icons(board, card[0], card[1], top_x, top_y)
+        coord_pos = topCoords(card)
+        draw_board_icons(board, card[0], card[1], coord_pos)
         if width > 0:
-            pygame.draw.rect(screen, COL_9,(top_x, top_y, width, TILE_HEIGHT))
+            pygame.draw.rect(screen, COL_9, (coord_pos[0], coord_pos[1], width, TILE_HEIGHT))
     pygame.display.update()
     fps_clock.tick(FPS)
+
+
+def topCoords(card):
+    """
+    Obtains the top coordinates for the card covers
+    :param card: card position tuple in the board
+    :return: the top left x and y coordinates
+    """
+    top_x = (LEFT_PANEL + BORDER_GAP_X + card[0] * (TILE_WIDTH + GAP_SIZE))
+    top_y = (BORDER_GAP_Y + card[1] * (TILE_HEIGHT + GAP_SIZE))
+    return (top_x, top_y)
+
+
+def getTileAtPos(pos_x, pos_y):
+    """
+    Retrieves the tile located at the pos_x and pos_y coordinates passed into the function.
+    :param pos_x: x coordinate
+    :param pos_y: y coordinate
+    :return: board pos in x and y that is located at that point or none if not hovered over a box
+    """
+    for x in range(BOARD_WIDTH):
+        for y in range(BOARD_HEIGHT):
+            top_x, top_y = topCoords((x, y))
+            card_rect = pygame.Rect(top_x, top_y, TILE_WIDTH, TILE_HEIGHT)
+            if card_rect.collidepoint(pos_x, pos_y):
+                return (x, y)
+    return (None, None)
+
 
 
 def game_state():
